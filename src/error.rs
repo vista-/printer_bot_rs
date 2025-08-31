@@ -12,4 +12,8 @@ pub enum PrinterBotError {
     Image(#[from] image::ImageError),
     #[error("invalid image")]
     InvalidImage,
+    #[error("thread panic")]
+    ThreadPanic,
+    #[error("qrcode generator fail")]
+    QrCodeGen(#[from] qrcode_generator::QRCodeError),
 }
