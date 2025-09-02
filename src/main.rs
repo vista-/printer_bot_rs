@@ -3,6 +3,7 @@
 use std::env;
 
 use error::PrinterBotError;
+use image::DynamicImage;
 use log::*;
 use teloxide_core::net::Download;
 use teloxide_core::types::{InputFile, InputMedia, InputMediaPhoto, ChatId, FileId};
@@ -127,12 +128,14 @@ async fn main() -> Result<(), PrinterBotError> {
                                     ).await.ok();
                                     continue;
                                 }
-                                Err(other_error) => return Err(other_error), // Propagate other errors
+                                Err(_) => continue, // Propagate other errors
                             };
 
                             bot.send_message(message.chat.id, "Your sticker is printing now!").await.ok();
                             if let Err(err) = queue_print_lines(lines, &settings, printer_mutex.clone()).await {
                                 error!("print failed, {:?}", err);
+                                bot.send_message(owner_id, format!("print failed, reason: {:?}", err)).await.ok();
+                                continue;
                             }
 
                             bot.send_message(message.chat.id, "Print done! Enjoy! :3").await.ok();
@@ -142,7 +145,8 @@ async fn main() -> Result<(), PrinterBotError> {
             }
             Err(err) => {
                 error!("{:?}", err);
-                bot.send_message(owner_id, format!("{:#?}", err)).await.ok();
+                bot.send_message(owner_id, format!("RequestError: {:#?}", err)).await.ok();
+                continue;
             }
         }
     }
@@ -271,7 +275,7 @@ async fn download_file(
     file_ext: &str,
 ) -> Result<String, PrinterBotError> {
     let file = bot.get_file(FileId::from(file_id.to_string())).await?;
-    let file_path = format!("/tmp/printer/{file_id}.{file_ext}");
+    let file_path = format!("/home/sticker/printed-files/{file_id}.{file_ext}");
     let mut dst = tokio::fs::File::create(&file_path).await?;
     bot.download_file(&file.path, &mut dst).await?;
     Ok(file_path)
@@ -280,7 +284,18 @@ async fn download_file(
 fn render_image(file_path: &str, settings: &Settings) -> Result<Vec<[u8; 90]>, PrinterBotError> {
     use image::ImageReader;
 
-    let img = ImageReader::open(file_path)?.decode()?;
+    let img: DynamicImage;
+    match ImageReader::open(file_path) {
+        Ok(img_handle) => {
+            img = match img_handle.decode() {
+                Ok(img) => img,
+                Err(e) => { return Err(PrinterBotError::Image(e))}
+            }
+        }
+        Err(_) => {
+            return Err(PrinterBotError::ImageNotFound);
+        }
+    };
 
     // Limit stickers ratio (so people don't print incredibly long stickers)
 

@@ -16,4 +16,6 @@ pub enum PrinterBotError {
     ThreadPanic,
     #[error("qrcode generator fail")]
     QrCodeGen(#[from] qrcode_generator::QRCodeError),
+    #[error("image not found")]
+    ImageNotFound,
 }
